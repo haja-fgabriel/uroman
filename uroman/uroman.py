@@ -696,94 +696,94 @@ class Uroman:
 
     def rebuild_num_props(self, out_filename: str, err_filename: str):
         n_out, n_err = 0, 0
-        with (open(out_filename, 'w', encoding='utf-8') as f_out,
-              open(err_filename, 'w', encoding='utf-8') as f_err):
-            codepoint = -1
-            while codepoint < 0xF0000:
-                codepoint += 1
-                char = chr(codepoint)
-                num = first_non_none(ud_numeric(char),  # robust ud.numeric
-                                     self.num_value(char))  # uroman table includes extra num values, e.g. for Egyptian
-                if num is None:
-                    continue
-                result_dict = {}
-                orig_txt = char
-                value: int | float | None = None  # non-fraction-value(3 1/2) = 3
-                fraction: Fraction | None = None  # fraction(3 1/2) = Fraction(1, 2)
-                num_base = None  # num_base(500) = 100
-                base_multiplier = None  # base_multiplier(500) = 5
-                script = None
-                is_large_power = self.dict_bool[('is-large-power', char)]
-                # num_base is typically a power of 10: 1, 10, 100, 1000, 10000, 100000, 1000000, ...
-                # exceptions might include 12 for the 'dozen' in popular English 'two dozen and one' (2*12+1=25)
-                # exceptions might include 20 for the 'score' in archaic English 'four score and seven' (4*20+7=87)
-                # noinspection SpellCheckingInspection   exceptions might include 20 for the 'vingt'
-                # noinspection SpellCheckingInspection   as in standard French 'quatre-vingt-treize' (4*20+13=93)
-                if script_name := self.chr_script_name(char):
-                    script = script_name
-                elif char in '0123456789':
-                    script = 'ascii-digit'
-                name = self.chr_name(char)
-                exclude_from_number_processing = False
-                for scrypt_type in ('SUPERSCRIPT', 'SUBSCRIPT',
-                                    'CIRCLED', 'PARENTHESIZED', 'SEGMENTED', 'MATHEMATICAL', 'ROMAN NUMERAL',
-                                    'FULL STOP', 'COMMA'):
-                    if scrypt_type in name:
-                        script = '*' + scrypt_type.lower().replace(' ', '-')
-                        exclude_from_number_processing = True
-                        break
-                for scrypt_type in ('VULGAR FRACTION',):
-                    if scrypt_type in name:
-                        script = scrypt_type.lower().replace(' ', '-')
-                        break
-                if exclude_from_number_processing:
-                    continue
-                if isinstance(num, int):
-                    value = num
-                    if 0 <= num <= 9:
-                        num_base = 1
-                        base_multiplier = num
-                        if "DIGIT" in name:
-                            num_type = 'digit'
+        with open(out_filename, 'w', encoding='utf-8') as f_out:
+              with open(err_filename, 'w', encoding='utf-8') as f_err:
+                codepoint = -1
+                while codepoint < 0xF0000:
+                    codepoint += 1
+                    char = chr(codepoint)
+                    num = first_non_none(ud_numeric(char),  # robust ud.numeric
+                                        self.num_value(char))  # uroman table includes extra num values, e.g. for Egyptian
+                    if num is None:
+                        continue
+                    result_dict = {}
+                    orig_txt = char
+                    value: Optional[Union[int, float]] = None  # non-fraction-value(3 1/2) = 3
+                    fraction: Optional[Fraction] = None  # fraction(3 1/2) = Fraction(1, 2)
+                    num_base = None  # num_base(500) = 100
+                    base_multiplier = None  # base_multiplier(500) = 5
+                    script = None
+                    is_large_power = self.dict_bool[('is-large-power', char)]
+                    # num_base is typically a power of 10: 1, 10, 100, 1000, 10000, 100000, 1000000, ...
+                    # exceptions might include 12 for the 'dozen' in popular English 'two dozen and one' (2*12+1=25)
+                    # exceptions might include 20 for the 'score' in archaic English 'four score and seven' (4*20+7=87)
+                    # noinspection SpellCheckingInspection   exceptions might include 20 for the 'vingt'
+                    # noinspection SpellCheckingInspection   as in standard French 'quatre-vingt-treize' (4*20+13=93)
+                    if script_name := self.chr_script_name(char):
+                        script = script_name
+                    elif char in '0123456789':
+                        script = 'ascii-digit'
+                    name = self.chr_name(char)
+                    exclude_from_number_processing = False
+                    for scrypt_type in ('SUPERSCRIPT', 'SUBSCRIPT',
+                                        'CIRCLED', 'PARENTHESIZED', 'SEGMENTED', 'MATHEMATICAL', 'ROMAN NUMERAL',
+                                        'FULL STOP', 'COMMA'):
+                        if scrypt_type in name:
+                            script = '*' + scrypt_type.lower().replace(' ', '-')
+                            exclude_from_number_processing = True
+                            break
+                    for scrypt_type in ('VULGAR FRACTION',):
+                        if scrypt_type in name:
+                            script = scrypt_type.lower().replace(' ', '-')
+                            break
+                    if exclude_from_number_processing:
+                        continue
+                    if isinstance(num, int):
+                        value = num
+                        if 0 <= num <= 9:
+                            num_base = 1
+                            base_multiplier = num
+                            if "DIGIT" in name:
+                                num_type = 'digit'
+                            else:
+                                # Chinese numbers 零 (0), 一 (1), ... 九 (9) have numeric values,
+                                # but are NOT (full) digits
+                                num_type = 'digit-like'
+                        elif m := regex.match(r'([0-9]+?)(0*)$', str(num)):
+                            base_multiplier = int(m.group(1))  # non_base_value(500) = 5
+                            num_base = int('1' + m.group(2))
+                            num_type = 'base' if base_multiplier == 1 else 'multi'
                         else:
-                            # Chinese numbers 零 (0), 一 (1), ... 九 (9) have numeric values,
-                            # but are NOT (full) digits
-                            num_type = 'digit-like'
-                    elif m := regex.match(r'([0-9]+?)(0*)$', str(num)):
-                        base_multiplier = int(m.group(1))  # non_base_value(500) = 5
-                        num_base = int('1' + m.group(2))
-                        num_type = 'base' if base_multiplier == 1 else 'multi'
+                            num_type = 'other-int'  # Do such cases exist?
+                    elif ("FRACTION" in name) and (fraction := fraction_char2fraction(char, num, self)):
+                        fraction = fraction
+                        num_type = 'fraction'
                     else:
-                        num_type = 'other-int'  # Do such cases exist?
-                elif ("FRACTION" in name) and (fraction := fraction_char2fraction(char, num, self)):
-                    fraction = fraction
-                    num_type = 'fraction'
-                else:
-                    num_type = 'other-num'  # Do such cases exist? Yes. Bengali currency numerators, ...
-                value_s = '' if value is None else str(value)
-                fraction_s = '' if fraction is None else f'{fraction.numerator}/{fraction.denominator}'
-                fraction_list = None if fraction is None else [fraction.numerator, fraction.denominator]
-                delimiter_s = ' ' if value_s and fraction_s else ''
-                rom = (value_s + delimiter_s + fraction_s) or orig_txt
-                add_non_none_to_dict(result_dict, 'txt', orig_txt)
-                add_non_none_to_dict(result_dict, 'rom', rom)
-                add_non_none_to_dict(result_dict, 'value', value)
-                add_non_none_to_dict(result_dict, 'fraction', fraction_list)
-                add_non_none_to_dict(result_dict, 'type', num_type)
-                if is_large_power:
-                    result_dict['is-large-power'] = True
-                add_non_none_to_dict(result_dict, 'base', num_base)
-                add_non_none_to_dict(result_dict, 'mult', base_multiplier)
-                add_non_none_to_dict(result_dict, 'script', script)
-                if num_type.startswith('other'):
-                    add_non_none_to_dict(result_dict, 'name', name)
-                    f_err.write(json.dumps(result_dict) + '\n')
-                    n_err += 1
-                else:
-                    if not script:
+                        num_type = 'other-num'  # Do such cases exist? Yes. Bengali currency numerators, ...
+                    value_s = '' if value is None else str(value)
+                    fraction_s = '' if fraction is None else f'{fraction.numerator}/{fraction.denominator}'
+                    fraction_list = None if fraction is None else [fraction.numerator, fraction.denominator]
+                    delimiter_s = ' ' if value_s and fraction_s else ''
+                    rom = (value_s + delimiter_s + fraction_s) or orig_txt
+                    add_non_none_to_dict(result_dict, 'txt', orig_txt)
+                    add_non_none_to_dict(result_dict, 'rom', rom)
+                    add_non_none_to_dict(result_dict, 'value', value)
+                    add_non_none_to_dict(result_dict, 'fraction', fraction_list)
+                    add_non_none_to_dict(result_dict, 'type', num_type)
+                    if is_large_power:
+                        result_dict['is-large-power'] = True
+                    add_non_none_to_dict(result_dict, 'base', num_base)
+                    add_non_none_to_dict(result_dict, 'mult', base_multiplier)
+                    add_non_none_to_dict(result_dict, 'script', script)
+                    if num_type.startswith('other'):
                         add_non_none_to_dict(result_dict, 'name', name)
-                    f_out.write(json.dumps(result_dict) + '\n')
-                    n_out += 1
+                        f_err.write(json.dumps(result_dict) + '\n')
+                        n_err += 1
+                    else:
+                        if not script:
+                            add_non_none_to_dict(result_dict, 'name', name)
+                        f_out.write(json.dumps(result_dict) + '\n')
+                        n_out += 1
         sys.stderr.write(f'Processed {codepoint} codepoints,\n  wrote {n_out} lines to {out_filename}\n'
                          f'    and {n_err} lines to {err_filename}\n')
 
